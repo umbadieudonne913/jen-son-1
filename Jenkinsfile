@@ -5,7 +5,7 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                git 'https://github.com/umbadieudonne913/jen-son-1.git'
+                git branch: 'main', url: 'https://github.com/umbadieudonne913/jen-son-1.git'
             }
         }
 
