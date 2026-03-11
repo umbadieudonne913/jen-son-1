@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        sonarQube 'sonar-scanner'
+    }
+
     stages {
 
         stage('Checkout') {
@@ -30,6 +34,5 @@ pipeline {
                 sh 'echo Build OK'
             }
         }
-
     }
 }
