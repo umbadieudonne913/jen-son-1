@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    environment {
+        SONAR_TOKEN = credentials('sonar-token')
+    }
+
     stages {
 
         stage('Checkout Code') {
@@ -14,7 +18,13 @@ pipeline {
                 script {
                     def scannerHome = tool 'sonar-scanner'
                     withSonarQubeEnv('SonarQube') {
-                        sh "${scannerHome}/bin/sonar-scanner"
+                        sh """
+                        ${scannerHome}/bin/sonar-scanner \
+                        -Dsonar.projectKey=jen-son-1 \
+                        -Dsonar.sources=. \
+                        -Dsonar.host.url=http://localhost:9000 \
+                        -Dsonar.login=$SONAR_TOKEN
+                        """
                     }
                 }
             }
