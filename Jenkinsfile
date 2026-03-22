@@ -14,14 +14,20 @@ pipeline {
                 script {
                     echo "🔹 Lancement de l'analyse SonarQube..."
                     
-                    sh """
-                    sonar-scanner \
-                        -Dsonar.projectKey=${PROJECT_KEY} \
-                        -Dsonar.projectVersion=${BUILD_NUMBER} \
-                        -Dsonar.sources=. \
-                        -Dsonar.host.url=${SONAR_HOST_URL} \
-                        -Dsonar.login=${SONAR_LOGIN}
-                    """
+                    // Récupère le chemin vers l'installation Sonar Scanner configurée dans Jenkins
+                    def scannerHome = tool 'sonar-scanner'
+
+                    // Injecte les variables d'environnement de SonarQube
+                    withSonarQubeEnv('SonarQube') {
+                        sh """
+                        ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=${PROJECT_KEY} \
+                            -Dsonar.projectVersion=${BUILD_NUMBER} \
+                            -Dsonar.sources=. \
+                            -Dsonar.host.url=${SONAR_HOST_URL} \
+                            -Dsonar.login=${SONAR_LOGIN}
+                        """
+                    }
                 }
             }
         }
