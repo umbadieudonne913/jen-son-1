@@ -3,13 +3,34 @@ pipeline {
 
     environment {
         PROJECT_KEY = "jen-son-1"
+        SONAR_HOST_URL = "http://localhost:9000"
+        SONAR_LOGIN = credentials('sonar-token') // Token Sonar enregistré dans Jenkins Credentials
     }
 
     stages {
 
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    echo "🔹 Lancement de l'analyse SonarQube..."
+                    
+                    sh """
+                    sonar-scanner \
+                        -Dsonar.projectKey=${PROJECT_KEY} \
+                        -Dsonar.projectVersion=${BUILD_NUMBER} \
+                        -Dsonar.sources=. \
+                        -Dsonar.host.url=${SONAR_HOST_URL} \
+                        -Dsonar.login=${SONAR_LOGIN}
+                    """
+                }
+            }
+        }
+
         stage('DevSecOps Framework Decision') {
             steps {
                 script {
+                    echo "🔹 Appel de l'API pour la décision du Framework..."
+                    
                     def response = sh(
                         script: """
                         curl -s http://localhost:8000/analyze/sonar/${PROJECT_KEY}
@@ -19,7 +40,11 @@ pipeline {
 
                     echo "Framework response: ${response}"
 
-                    if (response.contains("FAIL")) {
+                    // Décision stricte basée sur le JSON
+                    import groovy.json.JsonSlurper
+                    def json = new JsonSlurper().parseText(response)
+
+                    if (json.decision == "FAIL") {
                         error "❌ Pipeline bloqué par le Framework DevSecOps"
                     } else {
                         echo "✅ Pipeline autorisé par le Framework"
@@ -30,7 +55,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                echo 'Build en cours...'
+                echo '🔹 Build en cours...'
             }
         }
 
