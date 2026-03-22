@@ -41,8 +41,7 @@ pipeline {
                     echo "Framework response: ${response}"
 
                     // Décision stricte basée sur le JSON
-                    import groovy.json.JsonSlurper
-                    def json = new JsonSlurper().parseText(response)
+                    def json = new groovy.json.JsonSlurper().parseText(response)
 
                     if (json.decision == "FAIL") {
                         error "❌ Pipeline bloqué par le Framework DevSecOps"
