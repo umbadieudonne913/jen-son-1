@@ -5,8 +5,8 @@ pipeline {
         PROJECT_KEY = "jen-son-1"
         SONAR_HOST_URL = "http://192.168.213.137:9000"
         SONAR_LOGIN = credentials('sonar-token')
-        FRAMEWORK_URL = "http://192.168.49.2:8000"  # URL de ton framework
-        SONAR_CONFIG_ID = "1"  # ID de la configuration SonarQube dans ton framework
+        FRAMEWORK_URL = "http://192.168.49.2:8000"
+        SONAR_CONFIG_ID = "1"
     }
 
     stages {
@@ -48,7 +48,6 @@ pipeline {
                 script {
                     echo "🔹 Récupération des métriques SonarQube depuis le framework..."
                     
-                    // Récupère les métriques depuis l'API du framework
                     def metricsResponse = sh(
                         script: """
                         curl -s http://localhost:8000/sonar/metrics/${SONAR_CONFIG_ID}
@@ -58,7 +57,6 @@ pipeline {
                     
                     echo "Métriques récupérées: ${metricsResponse}"
                     
-                    // Stocker les métriques pour l'étape suivante
                     env.SONAR_METRICS = metricsResponse
                 }
             }
@@ -69,10 +67,8 @@ pipeline {
                 script {
                     echo "🔹 Appel de l'API d'évaluation pour la décision..."
                     
-                    // Extraire les métriques du JSON
                     def metrics = new groovy.json.JsonSlurper().parseText(env.SONAR_METRICS)
                     
-                    // Construire le payload pour l'API d'évaluation
                     def payload = [
                         pipeline_type: "jenkins",
                         pipeline_name: env.JOB_NAME,
@@ -92,7 +88,6 @@ pipeline {
                     
                     echo "Payload: ${payloadJson}"
                     
-                    // Appel à l'API d'évaluation
                     def response = sh(
                         script: """
                         curl -s -X POST ${FRAMEWORK_URL}/evaluation/decide \
@@ -104,13 +99,11 @@ pipeline {
                     
                     echo "Réponse du framework: ${response}"
                     
-                    // Analyser la décision
                     def decision = new groovy.json.JsonSlurper().parseText(response)
                     
                     echo "📊 Score: ${decision.total_score}% (seuil: ${decision.pass_threshold}%)"
                     echo "📝 Raison: ${decision.reason}"
                     
-                    // Afficher les détails des règles appliquées
                     if (decision.rule_details) {
                         echo "📋 Règles appliquées:"
                         decision.rule_details.each { rule ->
@@ -120,7 +113,6 @@ pipeline {
                         }
                     }
                     
-                    // Décision stricte
                     if (decision.decision == "REJECTED") {
                         error "❌ Pipeline REJETÉ par le Framework DevSecOps! Score: ${decision.total_score}% < ${decision.pass_threshold}%"
                     } else {
