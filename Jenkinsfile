@@ -3,8 +3,10 @@ pipeline {
 
     environment {
         PROJECT_KEY = "jen-son-1"
-        SONAR_HOST_URL = "http://localhost:9000"
-        SONAR_LOGIN = credentials('sonar-token') // Token Sonar enregistré dans Jenkins Credentials
+        SONAR_HOST_URL = "http://192.168.213.137:9000"
+        SONAR_LOGIN = credentials('sonar-token')
+        FRAMEWORK_URL = "http://192.168.49.2:8000"  # URL de ton framework
+        SONAR_CONFIG_ID = "1"  # ID de la configuration SonarQube dans ton framework
     }
 
     stages {
@@ -14,10 +16,8 @@ pipeline {
                 script {
                     echo "🔹 Lancement de l'analyse SonarQube..."
                     
-                    // Récupère le chemin vers l'installation Sonar Scanner configurée dans Jenkins
                     def scannerHome = tool 'sonar-scanner'
 
-                    // Injecte les variables d'environnement de SonarQube
                     withSonarQubeEnv('SonarQube') {
                         sh """
                         ${scannerHome}/bin/sonar-scanner \
@@ -32,27 +32,99 @@ pipeline {
             }
         }
 
-        stage('DevSecOps Framework Decision') {
+        stage('Attendre analyse SonarQube') {
             steps {
                 script {
-                    echo "🔹 Appel de l'API pour la décision du Framework..."
+                    echo "🔹 Attente de la fin de l'analyse SonarQube..."
+                    timeout(time: 5, unit: 'MINUTES') {
+                        waitForQualityGate abortPipeline: false
+                    }
+                }
+            }
+        }
+
+        stage('Récupérer métriques SonarQube') {
+            steps {
+                script {
+                    echo "🔹 Récupération des métriques SonarQube depuis le framework..."
                     
-                    def response = sh(
+                    // Récupère les métriques depuis l'API du framework
+                    def metricsResponse = sh(
                         script: """
-                        curl -s http://localhost:8000/analyze/sonar/${PROJECT_KEY}
+                        curl -s http://localhost:8000/sonar/metrics/${SONAR_CONFIG_ID}
                         """,
                         returnStdout: true
                     ).trim()
+                    
+                    echo "Métriques récupérées: ${metricsResponse}"
+                    
+                    // Stocker les métriques pour l'étape suivante
+                    env.SONAR_METRICS = metricsResponse
+                }
+            }
+        }
 
-                    echo "Framework response: ${response}"
-
-                    // Décision stricte basée sur le JSON
-                    def json = new groovy.json.JsonSlurper().parseText(response)
-
-                    if (json.decision == "FAIL") {
-                        error "❌ Pipeline bloqué par le Framework DevSecOps"
+        stage('DevSecOps Framework Decision') {
+            steps {
+                script {
+                    echo "🔹 Appel de l'API d'évaluation pour la décision..."
+                    
+                    // Extraire les métriques du JSON
+                    def metrics = new groovy.json.JsonSlurper().parseText(env.SONAR_METRICS)
+                    
+                    // Construire le payload pour l'API d'évaluation
+                    def payload = [
+                        pipeline_type: "jenkins",
+                        pipeline_name: env.JOB_NAME,
+                        project_name: PROJECT_KEY,
+                        metrics: [
+                            quality_gate: metrics.quality_gate,
+                            bugs: metrics.reliability,
+                            vulnerabilities: metrics.security,
+                            code_smells: metrics.maintainability,
+                            security_hotspots: metrics.security_hotspots,
+                            coverage: metrics.coverage,
+                            duplications: metrics.duplications
+                        ]
+                    ]
+                    
+                    def payloadJson = new groovy.json.JsonOutput().toJson(payload)
+                    
+                    echo "Payload: ${payloadJson}"
+                    
+                    // Appel à l'API d'évaluation
+                    def response = sh(
+                        script: """
+                        curl -s -X POST ${FRAMEWORK_URL}/evaluation/decide \
+                            -H "Content-Type: application/json" \
+                            -d '${payloadJson}'
+                        """,
+                        returnStdout: true
+                    ).trim()
+                    
+                    echo "Réponse du framework: ${response}"
+                    
+                    // Analyser la décision
+                    def decision = new groovy.json.JsonSlurper().parseText(response)
+                    
+                    echo "📊 Score: ${decision.total_score}% (seuil: ${decision.pass_threshold}%)"
+                    echo "📝 Raison: ${decision.reason}"
+                    
+                    // Afficher les détails des règles appliquées
+                    if (decision.rule_details) {
+                        echo "📋 Règles appliquées:"
+                        decision.rule_details.each { rule ->
+                            if (rule.condition_met) {
+                                echo "   - ${rule.name}: ${rule.metric_type} ${rule.operator} ${rule.threshold_value} (impact: ${rule.applied_impact})"
+                            }
+                        }
+                    }
+                    
+                    // Décision stricte
+                    if (decision.decision == "REJECTED") {
+                        error "❌ Pipeline REJETÉ par le Framework DevSecOps! Score: ${decision.total_score}% < ${decision.pass_threshold}%"
                     } else {
-                        echo "✅ Pipeline autorisé par le Framework"
+                        echo "✅ Pipeline APPROUVÉ par le Framework! Score: ${decision.total_score}% ≥ ${decision.pass_threshold}%"
                     }
                 }
             }
@@ -61,8 +133,24 @@ pipeline {
         stage('Build') {
             steps {
                 echo '🔹 Build en cours...'
+                echo '🚀 Déploiement autorisé par le framework!'
             }
         }
 
+        stage('Déploiement') {
+            steps {
+                echo '🔹 Déploiement en cours...'
+                echo '✅ Application déployée avec succès!'
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo "🎉 Pipeline terminé avec succès!"
+        }
+        failure {
+            echo "💥 Pipeline échoué! Consultez les logs pour plus de détails."
+        }
     }
 }
