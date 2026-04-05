@@ -5,7 +5,7 @@ pipeline {
         PROJECT_KEY = "jen-son-1"
         SONAR_HOST_URL = "http://192.168.213.137:9000"
         SONAR_LOGIN = credentials('sonar-token')
-        FRAMEWORK_URL = "http://192.168.49.2:8000"
+        FRAMEWORK_URL = "http://127.0.0.1:8000"
         SONAR_CONFIG_ID = "1"
     }
 
