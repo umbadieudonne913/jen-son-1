@@ -37,7 +37,10 @@ pipeline {
                 script {
                     echo "🔹 Appel de l'API pour la décision du Framework..."
                     
-                    // Récupérer les métriques SonarQube depuis ton framework
+                    // Attendre un peu que SonarQube traite les données
+                    sleep(time: 5, unit: 'SECONDS')
+                    
+                    // Récupérer les métriques
                     def metricsResponse = sh(
                         script: """
                         curl -s ${FRAMEWORK_URL}/sonar/metrics/${SONAR_CONFIG_ID}
@@ -45,40 +48,32 @@ pipeline {
                         returnStdout: true
                     ).trim()
                     
-                    def metrics = new groovy.json.JsonSlurper().parseText(metricsResponse)
+                    echo "Metrics response: ${metricsResponse}"
                     
-                    // Construire la requête pour la décision
-                    def payload = [
-                        pipeline_type: "jenkins",
-                        pipeline_name: env.JOB_NAME,
-                        project_name: PROJECT_KEY,
-                        metrics: [
-                            quality_gate: metrics.quality_gate,
-                            bugs: metrics.reliability,
-                            vulnerabilities: metrics.security,
-                            code_smells: metrics.maintainability,
-                            security_hotspots: metrics.security_hotspots,
-                            coverage: metrics.coverage,
-                            duplications: metrics.duplications
-                        ]
-                    ]
+                    // Construire manuellement le JSON pour la requête POST
+                    def payload = """
+                    {
+                        "pipeline_type": "jenkins",
+                        "pipeline_name": "${env.JOB_NAME}",
+                        "project_name": "${PROJECT_KEY}",
+                        "metrics": ${metricsResponse}
+                    }
+                    """
                     
-                    def payloadJson = new groovy.json.JsonOutput().toJson(payload)
+                    echo "Payload: ${payload}"
                     
                     def response = sh(
                         script: """
                         curl -s -X POST ${FRAMEWORK_URL}/evaluation/decide \
                             -H "Content-Type: application/json" \
-                            -d '${payloadJson}'
+                            -d '${payload}'
                         """,
                         returnStdout: true
                     ).trim()
 
                     echo "Framework response: ${response}"
 
-                    def json = new groovy.json.JsonSlurper().parseText(response)
-
-                    if (json.decision == "REJECTED") {
+                    if (response.contains('"decision":"REJECTED"') || response.contains('"decision": "REJECTED"')) {
                         error "❌ Pipeline bloqué par le Framework DevSecOps"
                     } else {
                         echo "✅ Pipeline autorisé par le Framework"
